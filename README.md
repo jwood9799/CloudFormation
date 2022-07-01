@@ -1,7 +1,7 @@
 # Auto-scaling_EC2_CloudFormation
-W8Project Auto Scaling EC2's in CloudFormation
-This is for a project I did for Level Up in Tech
-Below is an article I wrote about the project
+W8Project Auto Scaling EC2's in CloudFormation.
+This is for a project I did for Level Up in Tech.
+Below is an article I wrote about the project.
 https://medium.com/@jwood9799/infrastructure-as-code-iac-dd7f8ace9623
 
 
