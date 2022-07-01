@@ -13,8 +13,9 @@ The instance min and max should be 2 and 5. Once the template is Launched succes
 Remember that you will need:
 
 A web server security group that allows inbound traffic from HTTP from 0.0.0.0/0.
-A Launch Template
-An Auto Scaling Group
+A Launch Template.
+An Auto Scaling Group.
+
 ADVANCED:
 Add a target policy for the ASG to scale after cpu utilization is above 50%. After the autoscaling group has been created, find a stress tool to be able to stress an instance above 50% to see if your scaling policy works!
 
