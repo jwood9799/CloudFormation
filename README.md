@@ -5,7 +5,7 @@ Below is an article I wrote about the project.
 https://medium.com/@jwood9799/infrastructure-as-code-iac-dd7f8ace9623
 
 
-These were my instructions
+These were my instructions:
 Create an autoscaling group using t2.micro EC2 instances across 2 public AZs in the default vpc. All EC2 instances should have Apache installed with the ability to check any EC2 created by the autoscaling group’s Public IP address and be able to produce a test page.
 
 The instance min and max should be 2 and 5. Once the template is Launched successfully terminate two instances to see if the auto scaling group scales out.
