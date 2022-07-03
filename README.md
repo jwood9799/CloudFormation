@@ -4,6 +4,7 @@ This is for a project I did for Level Up in Tech.
 Here's an article I wrote about the project.
 https://medium.com/@jwood9799/infrastructure-as-code-iac-dd7f8ace9623
 
+The code in my .json file is a VPC Template with parts of an Auto Scaling Template.
 
 These were my instructions:
 Create an autoscaling group using t2.micro EC2 instances across 2 public AZs in the default vpc. All EC2 instances should have Apache installed with the ability to check any EC2 created by the autoscaling group’s Public IP address and be able to produce a test page. Note: The code I have is for the Advanced and Complex parts of the project, so the public IP's will not be able to connect to the internet.
