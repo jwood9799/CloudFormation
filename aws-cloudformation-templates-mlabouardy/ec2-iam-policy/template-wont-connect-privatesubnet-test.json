@@ -1,15 +1,32 @@
 {
   "AWSTemplateFormatVersion" : "2010-09-09",
+  "Description" : "Attach IAM Role to an EC2",
   "Parameters" : {
     "KeyName" : {
-      "Description" : "EC2 instance ssh key",
+      "Description" : "EC2 Instance SSH Key",
       "Type" : "AWS::EC2::KeyPair::KeyName"
     },
     "InstanceType" : {
-      "Description" : "EC2 instance type",
+      "Description" : "EC2 instance specs configuration",
       "Type" : "String",
       "Default" : "t2.micro",
-      "AllowedValues" : [ "t2.micro", "t2.small", "t2.medium"]
+      "AllowedValues" : ["t2.micro", "t2.small", "t2.medium"]
+    }
+  },
+  "Mappings" : {
+    "AMIs" : {
+      "us-east-1" : {
+        "Name" : "ami-8c1be5f6"
+      },
+      "us-east-2" : {
+        "Name" : "ami-c5062ba0"
+      },
+      "eu-west-1" : {
+        "Name" : "ami-acd005d5"
+      },
+      "ap-southeast-2" : {
+        "Name" : "ami-8536d6e7"
+      }
     }
   },
   "Resources" : {
@@ -82,26 +99,6 @@
         }
       }
     },
-    "NatIpAddress" : {
-      "Type" : "AWS::EC2::EIP",
-      "Properties" : {
-        "Domain" : "vpc"
-      }
-    },
-    "NatGateway" : {
-      "Type" : "AWS::EC2::NatGateway",
-      "Properties" : {
-        "AllocationId" : {
-          "Fn::GetAtt" : [
-            "NatIpAddress",
-            "AllocationId"
-          ]
-        },
-        "SubnetId" : {
-          "Ref" : "PublicSubnet"
-        }
-      }
-    },
     "PublicRouteTable" : {
       "Type" : "AWS::EC2::RouteTable",
       "Properties" : {
@@ -140,45 +137,7 @@
         }
       }
     },
-    "PrivateRouteTable" : {
-      "Type" : "AWS::EC2::RouteTable",
-      "Properties" : {
-        "VpcId" : {
-          "Ref" : "Staging"
-        },
-        "Tags" : [
-           {
-             "Key" : "Name",
-             "Value" : "private-rt"
-           }
-        ]
-      }
-    },
-    "PrivateRoute" : {
-      "Type" : "AWS::EC2::Route",
-      "DependsOn" : "NatGateway",
-      "Properties" : {
-        "RouteTableId" : {
-          "Ref" : "PrivateRouteTable"
-        },
-        "DestinationCidrBlock" : "0.0.0.0/0",
-        "NatGatewayId" : {
-          "Ref" : "NatGateway"
-        }
-      }
-    },
-    "PrivateSubnetRouteTableAssociation" : {
-      "Type" : "AWS::EC2::SubnetRouteTableAssociation",
-      "Properties" : {
-        "SubnetId" : {
-          "Ref" : "PrivateSubnet"
-        },
-        "RouteTableId" : {
-          "Ref" : "PrivateRouteTable"
-        }
-      }
-    },
-    "WebSG" : {
+    "SSHAccessSG" : {
       "Type" : "AWS::EC2::SecurityGroup",
       "Properties" : {
         "GroupDescription" : "Allow HTTP Traffic & SSH access from anywhere",
@@ -200,62 +159,40 @@
           }
         ],
         "Tags" : [
-           {
-             "Key" : "Name",
-             "Value" : "websg"
-           }
-        ]
-      }
-    },
-    "DBSG" : {
-      "Type" : "AWS::EC2::SecurityGroup",
-      "Properties" : {
-        "GroupDescription" : "Allow MySQL Traffic & SSH access from public subnet",
-        "VpcId" : {
-          "Ref" : "Staging"
-        },
-        "SecurityGroupIngress" : [
           {
-            "IpProtocol" : "tcp",
-            "FromPort" : "3306",
-            "ToPort" : "3306",
-            "SourceSecurityGroupId" : {
-              "Ref" : "WebSG"
-            }
-          },
-          {
-            "FromPort" : "22",
-            "ToPort" : "22",
-            "IpProtocol" : "tcp",
-            "SourceSecurityGroupId" : {
-              "Ref" : "WebSG"
-            }
+            "Key" : "Name",
+            "Value" : "SSHAccessSG"
           }
-        ],
-        "Tags" : [
-           {
-             "Key" : "Name",
-             "Value" : "DBSG"
-           }
         ]
       }
     },
     "WebServer" : {
       "Type" : "AWS::EC2::Instance",
       "Properties" : {
-        "ImageId" : "ami-4fffc834",
+        "ImageId" : {
+          "Fn::FindInMap" : [
+            "AMIs",
+            {
+              "Ref" : "AWS::Region"
+            },
+            "Name"
+          ]
+        },
         "SubnetId" : {
           "Ref" : "PublicSubnet"
         },
         "InstanceType" : {
           "Ref" : "InstanceType"
         },
+        "IamInstanceProfile" : {
+          "Ref" : "ListS3BucketsInstanceProfile"
+        },
         "KeyName" : {
           "Ref" : "KeyName"
         },
         "SecurityGroupIds" : [
           {
-            "Ref" : "WebSG"
+            "Ref" : "SSHAccessSG"
           }
         ],
         "UserData" : {
@@ -263,11 +200,18 @@
             "Fn::Join" : [
               "",
               [
-                "#!/bin/sh\n",
-                "yum install -y httpd\n",
-                "chkconfig httpd on\n",
-                "httpd\n",
-                "echo '<html>Hello guys !<html/>' > /var/www/html/index.html"
+                "#!/bin/bash\n",
+                "yum update -y\n", 
+                "yum install -y httpd\n", 
+                "systemctl start httpd\n", 
+                "systemctl enable httpd\n", 
+                "cd /var/www/html\n", 
+                "aws s3 cp s3://dct-cf-website/index.html ./\n", 
+                "aws s3 cp s3://dct-cf-website/website.css ./\n", 
+                "cp index.html index.txt\n", 
+                "rm -rf index.html\n", 
+                "EC2AZ=$(curl -s http://169.254.169.254/latest/meta-data/placement/availability-zone)\n", 
+                "sed \"s/AZID/$EC2AZ/\" /var/www/html/index.txt > /var/www/html/index.html"
               ]
             ]
           }
@@ -280,36 +224,64 @@
         ]
       }
     },
-    "Database" : {
-      "Type" : "AWS::EC2::Instance",
+    "ListS3BucketsInstanceProfile" : {
+      "Type" : "AWS::IAM::InstanceProfile",
       "Properties" : {
-        "ImageId" : "ami-4fffc834",
-        "SubnetId" : {
-          "Ref" : "PrivateSubnet"
-        },
-        "InstanceType" : {
-          "Ref" : "InstanceType"
-        },
-        "KeyName" : {
-          "Ref" : "KeyName"
-        },
-        "SecurityGroupIds" : [
+        "Path" : "/",
+        "Roles" : [
           {
-            "Ref" : "DBSG"
+            "Ref" : "ListS3BucketsRole"
           }
-        ],
-        "Tags" : [
-           {
-             "Key" : "Name",
-             "Value" : "database"
-           }
         ]
+      }
+    },
+    "ListS3BucketsPolicy" : {
+      "Type" : "AWS::IAM::Policy",
+      "Properties" : {
+        "PolicyName" : "ListS3BucketsPolicy",
+        "PolicyDocument" : {
+          "Statement" : [
+            {
+              "Effect" : "Allow",
+              "Action" : [
+                "s3:*",
+                "s3-object-lambda:*"
+              ],
+              "Resource" : "*"
+            }
+          ]
+        },
+        "Roles" : [
+          {
+            "Ref" : "ListS3BucketsRole"
+          }
+        ]
+      }
+    },
+    "ListS3BucketsRole" : {
+      "Type" : "AWS::IAM::Role",
+      "Properties" : {
+        "AssumeRolePolicyDocument": {
+          "Version" : "2012-10-17",
+          "Statement" : [
+            {
+              "Effect" : "Allow",
+              "Principal" : {
+                "Service" : ["ec2.amazonaws.com"]
+              },
+              "Action" : [
+                "sts:AssumeRole"
+              ]
+            }
+          ]
+        },
+        "Path" : "/"
       }
     }
   },
-  "Outputs": {
-    "WebServer" : {
-      "Description" : "Webserver IP address",
+  "Outputs" : {
+    "EC2" : {
+      "Description" : "EC2 IP address",
       "Value" : {
         "Fn::Join" : [
           "",
@@ -318,26 +290,14 @@
             {
               "Fn::GetAtt" : [
                 "WebServer",
-                "PublicDnsName"
-              ]
-            }
-          ]
-        ]
-      }
-    },
-    "Database" : {
-      "Description" : "Database URI",
-      "Value" : {
-        "Fn::Join" : [
-          "",
-          [
-            {
-              "Fn::GetAtt" : [
-                "Database",
-                "PrivateIp"
+                "PublicIp"
               ]
             },
-            ":3306"
+            " -i ",
+            {
+              "Ref" : "KeyName"
+            },
+            ".pem"
           ]
         ]
       }

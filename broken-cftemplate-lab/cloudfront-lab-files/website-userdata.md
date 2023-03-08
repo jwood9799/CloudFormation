@@ -10,3 +10,4 @@ cp index.html index.txt
 rm -rf index.html
 EC2AZ=$(curl -s http://169.254.169.254/latest/meta-data/placement/availability-zone) 
 sed "s/AZID/$EC2AZ/" /var/www/html/index.txt > /var/www/html/index.html
+ 

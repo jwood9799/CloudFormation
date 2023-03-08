@@ -2,14 +2,14 @@
   "AWSTemplateFormatVersion" : "2010-09-09",
   "Parameters" : {
     "KeyName" : {
-      "Description" : "When it's finally working it will do mucho!",
+      "Description" : "EC2 instance ssh key",
       "Type" : "AWS::EC2::KeyPair::KeyName"
     },
     "InstanceType" : {
       "Description" : "EC2 instance type",
       "Type" : "String",
       "Default" : "t2.micro",
-      "AllowedValues" : [ "t2.micro", "t2.small", "t2.medium" ]
+      "AllowedValues" : [ "t2.micro", "t2.small", "t2.medium"]
     },
     "InstanceCount" : {
       "Description" : "Number of EC2 instances to launch",
@@ -32,7 +32,7 @@
         ]
       }
     },
-    "PublicSubnet" : {
+    "PublicSubnet1" : {
       "Type" : "AWS::EC2::Subnet",
       "Properties" : {
         "CidrBlock" : "10.0.0.0/24",
@@ -66,38 +66,6 @@
         ]
       }
     },
-    "PrivateSubnet" : {
-      "Type" : "AWS::EC2::Subnet",
-      "Properties" : {
-        "CidrBlock" : "10.0.1.0/24",
-        "AvailabilityZone" : "us-east-1a",
-        "VpcId" : {
-          "Ref" : "Staging"
-        },
-        "Tags" : [
-           {
-             "Key" : "Name",
-             "Value" : "private-10.0.1.0-us-east-1a"
-           }
-        ]
-      }
-    },
-    "PrivateSubnet2" : {
-      "Type" : "AWS::EC2::Subnet",
-      "Properties" : {
-        "CidrBlock" : "10.0.3.0/24",
-        "AvailabilityZone" : "us-east-1b",
-        "VpcId" : {
-          "Ref" : "Staging"
-        },
-        "Tags" : [
-           {
-             "Key" : "Name",
-             "Value" : "private-10.0.1.0-us-east-1b"
-           }
-        ]
-      }
-    },
     "IGW" : {
       "Type" : "AWS::EC2::InternetGateway",
       "Properties" : {
@@ -118,24 +86,6 @@
         "InternetGatewayId" : {
           "Ref" : "IGW"
         }
-      }
-    },
-    "NatIpAddress" : {
-      "Type" : "AWS::EC2::EIP",
-      "Properties" : {
-        "Domain" : "vpc"
-      }
-    },
-    "NatGateway" : {
-      "Type" : "AWS::EC2::NatGateway",
-      "Properties" : {
-        "AllocationId" : {
-          "Fn::GetAtt" : [
-            "NatIpAddress",
-            "AllocationId"
-          ]
-        },
-        "SubnetId" : { "Ref" : "PublicSubnet" }
       }
     },
     "PublicRouteTable" : {
@@ -169,7 +119,7 @@
       "Type" : "AWS::EC2::SubnetRouteTableAssociation",
       "Properties" : {
         "SubnetId" : {
-          "Ref" : "PublicSubnet"
+          "Ref" : "PublicSubnet1"
         },
         "RouteTableId" : {
           "Ref" : "PublicRouteTable"
@@ -187,53 +137,23 @@
         }
       }
     },
-    "PrivateRouteTable" : {
-      "Type" : "AWS::EC2::RouteTable",
+    "WebServer" : {
+      "Type" : "AWS::AutoScaling::AutoScalingGroup",
       "Properties" : {
-        "VpcId" : {
-          "Ref" : "Staging"
-        },
+        "VPCZoneIdentifier" : [ { "Ref" : "PublicSubnet1" }, { "Ref" : "PublicSubnet2" } ], 
+        "LaunchConfigurationName" : { "Ref" : "LaunchConfig" },
+        "MinSize" : "2",
+        "MaxSize" : "5",
+        "DesiredCapacity" : { "Ref" : "InstanceCount" },
+        "TargetGroupARNs" : [ { "Ref" : "ALBTargetGroup" } ],
+
         "Tags" : [
            {
              "Key" : "Name",
-             "Value" : "private-rt"
+             "Value" : "webserver",
+             "PropagateAtLaunch" : "false"  
            }
         ]
-      }
-    },
-    "PrivateRoute" : {
-      "Type" : "AWS::EC2::Route",
-      "DependsOn" : "NatGateway",
-      "Properties" : {
-        "RouteTableId" : {
-          "Ref" : "PrivateRouteTable"
-        },
-        "DestinationCidrBlock" : "0.0.0.0/0", 
-        "NatGatewayId" : {
-          "Ref" : "NatGateway"
-        }
-      }
-    },
-    "PrivateSubnetRouteTableAssociation" : {
-      "Type" : "AWS::EC2::SubnetRouteTableAssociation",
-      "Properties" : {
-        "SubnetId" : {
-          "Ref" : "PrivateSubnet"
-        },
-        "RouteTableId" : {
-          "Ref" : "PrivateRouteTable"
-        }
-      }
-    },
-    "PrivateSubnetRouteTableAssociation2" : {
-      "Type" : "AWS::EC2::SubnetRouteTableAssociation",
-      "Properties" : {
-        "SubnetId" : {
-          "Ref" : "PrivateSubnet2"
-        },
-        "RouteTableId" : {
-          "Ref" : "PrivateRouteTable"
-        }
       }
     },
     "LaunchConfig" : {
@@ -250,18 +170,11 @@
             "Fn::Join" : [
               "",
               [
-                "#!/bin/bash\n",
-                "yum update -y\n", 
-                "yum install -y httpd\n", 
-                "systemctl start httpd\n", 
-                "systemctl enable httpd\n", 
-                "cd /var/www/html\n", 
-                "aws s3 cp s3://dct-cf-website/index.html ./\n", 
-                "aws s3 cp s3://dct-cf-website/website.css ./\n", 
-                "cp index.html index.txt\n", 
-                "rm -rf index.html\n", 
-                "EC2AZ=$(curl -s http://169.254.169.254/latest/meta-data/placement/availability-zone)\n", 
-                "sed \"s/AZID/$EC2AZ/\" /var/www/html/index.txt > /var/www/html/index.html"
+                "#!/bin/sh\n",
+                "yum install -y httpd\n",
+                "chkconfig httpd on\n",
+                "httpd\n",
+                "echo '<html>Congratulations, you fixed it!!!<html/>' > /var/www/html/index.html"
               ]
             ]
           }
@@ -272,6 +185,29 @@
       "Type" : "AWS::IAM::InstanceProfile",
       "Properties" : {
         "Path" : "/",
+        "Roles" : [
+          {
+            "Ref" : "AmazonS3FullAccessRole"
+          }
+        ]
+      }
+    },
+    "AmazonS3FullAccessPolicy" : {
+      "Type" : "AWS::IAM::Policy",
+      "Properties" : {
+        "PolicyName" : "AmazonS3FullAccess",
+        "PolicyDocument" : {
+          "Statement" : [
+            {
+              "Effect" : "Allow",
+              "Action" : [
+                "s3:*",
+                "s3-object-lambda:*"
+              ],
+              "Resource" : "*"
+            }
+          ]
+        },
         "Roles" : [
           {
             "Ref" : "AmazonS3FullAccessRole"
@@ -299,88 +235,20 @@
         "Path" : "/"
       }
     },
-    "AmazonS3FullAccessPolicy" : {
-      "Type" : "AWS::IAM::Policy",
-      "Properties" : {
-        "PolicyName" : "AmazonS3FullAccessPolicy",
-        "PolicyDocument" : {
-          "Statement" : [
-            {
-              "Effect" : "Allow",
-              "Action" : [
-                "s3:*",
-                "s3-object-lambda:*"
-              ],
-              "Resource" : "*"
-            }
-          ]
-        },
-        "Roles" : [
-          {
-            "Ref" : "AmazonS3FullAccessRole"
-          }
-        ]
-      }
-    },
-    "Database" : {
-      "Type" : "AWS::EC2::Instance",
-      "Properties" : {
-        "ImageId" : "ami-4fffc834",
-        "SubnetId" : {
-          "Ref" : "PrivateSubnet"
-          },
-        "InstanceType" : {
-          "Ref" : "InstanceType"
-        },
-        "KeyName" : {
-          "Ref" : "KeyName"
-        },
-        "SecurityGroupIds" : [
-          {
-            "Ref" : "DataBaseSG"
-          }
-        ],
-        "Tags" : [
-           {
-             "Key" : "Name",
-             "Value" : "database"
-           }
-        ]
-      }
-    },
-    "AutoScalingGroup" : {
-      "Type" : "AWS::AutoScaling::AutoScalingGroup",
-      "Properties" : {
-        "VPCZoneIdentifier" : [ { "Ref" : "PublicSubnet" }, { "Ref" : "PublicSubnet2"} ], 
-        "LaunchConfigurationName" : { "Ref" : "LaunchConfig" },
-        "MinSize" : "2",
-        "MaxSize" : "5",
-        "DesiredCapacity" : { "Ref" : "InstanceCount" },
-        "TargetGroupARNs" : [ { "Ref" : "ALBTargetGroup" } ],
-
-        "Tags" : [
-           {
-             "Key" : "Name",
-             "Value" : "autoscalinginstances",
-             "PropagateAtLaunch" : "true"  
-           }
-        ]
-      }
-    },
-    "AutoScalingGroupScaleUpPolicy" : {
+    "WebServerScaleUpPolicy" : {
       "Type" : "AWS::AutoScaling::ScalingPolicy",
       "Properties" : {
         "AdjustmentType" : "ChangeInCapacity",
-        "AutoScalingGroupName" : { "Ref" : "AutoScalingGroup" },
+        "AutoScalingGroupName" : { "Ref" : "WebServer" },
         "Cooldown" : "60",
         "ScalingAdjustment" : "1"
       }
     },
-    "AutoScalingGroupScaleDownPolicy" : {
+    "WebServerScaleDownPolicy" : {
       "Type" : "AWS::AutoScaling::ScalingPolicy",
       "Properties" : {
         "AdjustmentType" : "ChangeInCapacity",
-        "AutoScalingGroupName" : { "Ref" : "AutoScalingGroup" },
+        "AutoScalingGroupName" : { "Ref" : "WebServer" },
         "Cooldown" : "60",
         "ScalingAdjustment" : "-1"
       }
@@ -395,11 +263,11 @@
         "Period": "120",
         "EvaluationPeriods": "2",
         "Threshold": "50",
-        "AlarmActions": [ { "Ref": "AutoScalingGroupScaleUpPolicy" } ],
+        "AlarmActions": [ { "Ref": "WebServerScaleUpPolicy" } ],
         "Dimensions": [
           {
             "Name": "AutoScalingGroupName",
-            "Value": { "Ref": "AutoScalingGroup" }
+            "Value": { "Ref": "WebServer" }
           }
         ],
         "ComparisonOperator": "GreaterThanThreshold"
@@ -415,11 +283,11 @@
         "Period": "120",
         "EvaluationPeriods": "2",
         "Threshold": "50",
-        "AlarmActions": [ { "Ref": "AutoScalingGroupScaleDownPolicy" } ],
+        "AlarmActions": [ { "Ref": "WebServerScaleDownPolicy" } ],
         "Dimensions": [
           {
             "Name": "AutoScalingGroupName",
-            "Value": { "Ref": "AutoScalingGroup" }
+            "Value": { "Ref": "WebServer" }
           }
         ],
         "ComparisonOperator": "LessThanThreshold"
@@ -428,17 +296,17 @@
     "ApplicationLoadBalancer" : {
       "Type" : "AWS::ElasticLoadBalancingV2::LoadBalancer",
       "Properties" : {
-        "Subnets" : [ { "Ref" : "PublicSubnet" }, { "Ref" : "PublicSubnet2" } ],
+        "Subnets" : [ { "Ref" : "PublicSubnet1" }, {"Ref": "PublicSubnet2"} ],
         "SecurityGroups" : [ { "Ref" : "LoadBalancerSecurityGroup" } ]
       }
     },
     "ALBListener" : {
       "Type" : "AWS::ElasticLoadBalancingV2::Listener",
       "Properties" : {
-        "DefaultActions" : [ {
+        "DefaultActions" : [{
           "Type" : "forward",
           "TargetGroupArn" : { "Ref" : "ALBTargetGroup" }
-        } ],
+        }],
         "LoadBalancerArn" : { "Ref" : "ApplicationLoadBalancer" },
         "Port" : "80",
         "Protocol" : "HTTP"
@@ -449,7 +317,7 @@
       "Properties" : {
         "HealthCheckIntervalSeconds" : 30,
         "HealthCheckTimeoutSeconds" : 25,
-        "HealthyThresholdCount" : 2,
+        "HealthyThresholdCount" : 3,
         "Port" : 80,
         "Protocol" : "HTTP",
         "UnhealthyThresholdCount" : 5,
@@ -467,13 +335,14 @@
           "ToPort" : "80",
           "CidrIp" : "0.0.0.0/0"
         } ],
-        "SecurityGroupEgress" : [ {
+        "SecurityGroupEgress" : [ 
+          {
           "IpProtocol" : "tcp",
           "FromPort" : "80",
           "ToPort" : "80",
           "CidrIp" : "0.0.0.0/0"
-        } 
-      ],
+          } 
+        ],
         "Tags" : [
           {
             "Key" : "Name",
@@ -503,14 +372,6 @@
             "CidrIp" : "0.0.0.0/0"
           }
         ],
-        "SecurityGroupEgress" : [ 
-          {
-            "IpProtocol" : "tcp",
-            "FromPort" : "0",
-            "ToPort" : "65535",
-            "CidrIp" : "0.0.0.0/0"
-           }
-        ],
         "Tags" : [
            {
              "Key" : "Name",
@@ -518,43 +379,10 @@
            }
         ]
       }
-    },
-    "DataBaseSG" : {
-      "Type" : "AWS::EC2::SecurityGroup",
-      "Properties" : {
-        "GroupDescription" : "Allow MySQL Traffic & SSH access from public subnet",
-        "VpcId" : {
-          "Ref" : "Staging"
-        },
-        "SecurityGroupIngress" : [
-          {
-            "IpProtocol" : "tcp",
-            "FromPort" : "3306",
-            "ToPort" : "3306",
-            "SourceSecurityGroupId" : {
-              "Ref" : "WebSG"
-            }
-          },
-          {
-            "FromPort" : "22",
-            "ToPort" : "22",
-            "IpProtocol" : "tcp",
-            "SourceSecurityGroupId" : {
-              "Ref" : "WebSG"
-            }
-          }
-        ],
-        "Tags" : [
-           {
-             "Key" : "Name",
-             "Value" : "databasesg"
-           }
-        ]
-      }
     }
   },
   "Outputs": {
-    "AutoScalingGroup" : {
+    "WebServer" : {
       "Description" : "Webserver IP address",
       "Value" : {
         "Fn::Join" : [
@@ -567,23 +395,6 @@
                 "DNSName"
               ]
             }
-          ]
-        ]
-      }
-    },
-    "Database" : {
-      "Description" : "Database URI",
-      "Value" : {
-        "Fn::Join" : [
-          "",
-          [
-            {
-              "Fn::GetAtt" : [
-                "Database",
-                "PrivateIp"
-              ]
-            },
-            ":3306"
           ]
         ]
       }

@@ -5,11 +5,11 @@
 
   "Parameters" : {
 
-    "VpcId" : {
+    "VPCId" : {
       "Type" : "AWS::EC2::VPC::Id",
       "Description" : "VpcId of your existing Virtual Private Cloud (VPC)",
       "ConstraintDescription" : "must be the VPC Id of an existing Virtual Private Cloud."
-    },
+    }, 
 
     "Subnets" : {
       "Type" : "List<AWS::EC2::Subnet::Id>",
@@ -45,11 +45,6 @@
       "Description" : "Number of EC2 instances to launch",
       "Type" : "Number",
       "Default" : "2"
-    },
-
-    "AmazonS3FullAccess" : {
-      "Type" : "String",
-      "Description" : "arn:aws:iam::aws:policy/AmazonS3FullAccess"
     }
   },
 
@@ -220,47 +215,6 @@
 
   "Resources" : {
 
-    "RootRole": {
-      "Type": "AWS::IAM::Role",
-      "Properties": {
-          "AssumeRolePolicyDocument": {
-              "Version": "2012-10-17",
-              "Statement": [
-                  {
-                      "Effect": "Allow",
-                      "Principal": {
-                          "Service": [
-                              "ec2.amazonaws.com"
-                          ]
-                      },
-                      "Action": [
-                          "sts:AssumeRole"
-                      ]
-                  }
-              ]
-          },
-
-          "Path": "/",
-          "ManagedPolicyArns": [
-              {
-                  "Ref": "AmazonS3FullAccess"
-              }
-          ]
-      }
-  },
-
-  "RootInstanceProfile": {
-      "Type": "AWS::IAM::InstanceProfile",
-      "Properties": {
-          "Path": "/",
-          "Roles": [
-              {
-                  "Ref": "RootRole"
-              }
-          ]
-      }
-  },
-
     "WebServerGroup" : {
       "Type" : "AWS::AutoScaling::AutoScalingGroup",
       "Properties" : {
@@ -355,7 +309,18 @@
         "KeyName"        : { "Ref" : "KeyName" },
         "InstanceType" : { "Ref" : "InstanceType" },
         "UserData"       : { "Fn::Base64" : { "Fn::Join" : ["", [
-          "yum update -y yum install -y httpd systemctl start httpd systemctl enable httpd cd /var/www/html aws s3 cp s3://dct-cf-website/index.html ./ aws s3 cp s3://dct-cf-website/website.css ./ cp index.html index.txt rm -rf index.html EC2AZ=$(curl -s http://169.254.169.254/latest/meta-data/placement/availability-zone) sed \"s/AZID/$EC2AZ/\" /var/www/html/index.txt > /var/www/html/index.html"
+             "#!/bin/bash -xe\n",
+             "yum update -y aws-cfn-bootstrap\n",
+
+             "/opt/aws/bin/cfn-init -v ",
+             "         --stack ", { "Ref" : "AWS::StackName" },
+             "         --resource LaunchConfig ",
+             "         --region ", { "Ref" : "AWS::Region" }, "\n",
+
+             "/opt/aws/bin/cfn-signal -e $? ",
+             "         --stack ", { "Ref" : "AWS::StackName" },
+             "         --resource WebServerGroup ",
+             "         --region ", { "Ref" : "AWS::Region" }, "\n"
         ]]}}
       }
     },

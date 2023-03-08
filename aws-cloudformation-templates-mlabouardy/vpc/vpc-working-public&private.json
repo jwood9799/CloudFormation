@@ -2,7 +2,7 @@
   "AWSTemplateFormatVersion" : "2010-09-09",
   "Parameters" : {
     "KeyName" : {
-      "Description" : "When it's finally working it will do mucho!",
+      "Description" : "EC2 instance ssh key",
       "Type" : "AWS::EC2::KeyPair::KeyName"
     },
     "InstanceType" : {
@@ -78,22 +78,6 @@
            {
              "Key" : "Name",
              "Value" : "private-10.0.1.0-us-east-1a"
-           }
-        ]
-      }
-    },
-    "PrivateSubnet2" : {
-      "Type" : "AWS::EC2::Subnet",
-      "Properties" : {
-        "CidrBlock" : "10.0.3.0/24",
-        "AvailabilityZone" : "us-east-1b",
-        "VpcId" : {
-          "Ref" : "Staging"
-        },
-        "Tags" : [
-           {
-             "Key" : "Name",
-             "Value" : "private-10.0.1.0-us-east-1b"
            }
         ]
       }
@@ -225,15 +209,23 @@
         }
       }
     },
-    "PrivateSubnetRouteTableAssociation2" : {
-      "Type" : "AWS::EC2::SubnetRouteTableAssociation",
+    "WebServer" : {
+      "Type" : "AWS::AutoScaling::AutoScalingGroup",
       "Properties" : {
-        "SubnetId" : {
-          "Ref" : "PrivateSubnet2"
-        },
-        "RouteTableId" : {
-          "Ref" : "PrivateRouteTable"
-        }
+        "VPCZoneIdentifier" : [ { "Ref" : "PublicSubnet" }, { "Ref" : "PublicSubnet2"} ], 
+        "LaunchConfigurationName" : { "Ref" : "LaunchConfig" },
+        "MinSize" : "2",
+        "MaxSize" : "5",
+        "DesiredCapacity" : { "Ref" : "InstanceCount" },
+        "TargetGroupARNs" : [ { "Ref" : "ALBTargetGroup" } ],
+
+        "Tags" : [
+           {
+             "Key" : "Name",
+             "Value" : "webserver",
+             "PropagateAtLaunch" : "false"  
+           }
+        ]
       }
     },
     "LaunchConfig" : {
@@ -250,18 +242,11 @@
             "Fn::Join" : [
               "",
               [
-                "#!/bin/bash\n",
-                "yum update -y\n", 
-                "yum install -y httpd\n", 
-                "systemctl start httpd\n", 
-                "systemctl enable httpd\n", 
-                "cd /var/www/html\n", 
-                "aws s3 cp s3://dct-cf-website/index.html ./\n", 
-                "aws s3 cp s3://dct-cf-website/website.css ./\n", 
-                "cp index.html index.txt\n", 
-                "rm -rf index.html\n", 
-                "EC2AZ=$(curl -s http://169.254.169.254/latest/meta-data/placement/availability-zone)\n", 
-                "sed \"s/AZID/$EC2AZ/\" /var/www/html/index.txt > /var/www/html/index.html"
+                "#!/bin/sh\n",
+                "yum install -y httpd\n",
+                "chkconfig httpd on\n",
+                "httpd\n",
+                "echo '<html>Hello guys !<html/>' > /var/www/html/index.html"
               ]
             ]
           }
@@ -272,6 +257,29 @@
       "Type" : "AWS::IAM::InstanceProfile",
       "Properties" : {
         "Path" : "/",
+        "Roles" : [
+          {
+            "Ref" : "AmazonS3FullAccessRole"
+          }
+        ]
+      }
+    },
+    "AmazonS3FullAccessPolicy" : {
+      "Type" : "AWS::IAM::Policy",
+      "Properties" : {
+        "PolicyName" : "AmazonS3FullAccessPolicy",
+        "PolicyDocument" : {
+          "Statement" : [
+            {
+              "Effect" : "Allow",
+              "Action" : [
+                "s3:*",
+                "s3-object-lambda:*"
+              ],
+              "Resource" : "*"
+            }
+          ]
+        },
         "Roles" : [
           {
             "Ref" : "AmazonS3FullAccessRole"
@@ -299,88 +307,20 @@
         "Path" : "/"
       }
     },
-    "AmazonS3FullAccessPolicy" : {
-      "Type" : "AWS::IAM::Policy",
-      "Properties" : {
-        "PolicyName" : "AmazonS3FullAccessPolicy",
-        "PolicyDocument" : {
-          "Statement" : [
-            {
-              "Effect" : "Allow",
-              "Action" : [
-                "s3:*",
-                "s3-object-lambda:*"
-              ],
-              "Resource" : "*"
-            }
-          ]
-        },
-        "Roles" : [
-          {
-            "Ref" : "AmazonS3FullAccessRole"
-          }
-        ]
-      }
-    },
-    "Database" : {
-      "Type" : "AWS::EC2::Instance",
-      "Properties" : {
-        "ImageId" : "ami-4fffc834",
-        "SubnetId" : {
-          "Ref" : "PrivateSubnet"
-          },
-        "InstanceType" : {
-          "Ref" : "InstanceType"
-        },
-        "KeyName" : {
-          "Ref" : "KeyName"
-        },
-        "SecurityGroupIds" : [
-          {
-            "Ref" : "DataBaseSG"
-          }
-        ],
-        "Tags" : [
-           {
-             "Key" : "Name",
-             "Value" : "database"
-           }
-        ]
-      }
-    },
-    "AutoScalingGroup" : {
-      "Type" : "AWS::AutoScaling::AutoScalingGroup",
-      "Properties" : {
-        "VPCZoneIdentifier" : [ { "Ref" : "PublicSubnet" }, { "Ref" : "PublicSubnet2"} ], 
-        "LaunchConfigurationName" : { "Ref" : "LaunchConfig" },
-        "MinSize" : "2",
-        "MaxSize" : "5",
-        "DesiredCapacity" : { "Ref" : "InstanceCount" },
-        "TargetGroupARNs" : [ { "Ref" : "ALBTargetGroup" } ],
-
-        "Tags" : [
-           {
-             "Key" : "Name",
-             "Value" : "autoscalinginstances",
-             "PropagateAtLaunch" : "true"  
-           }
-        ]
-      }
-    },
-    "AutoScalingGroupScaleUpPolicy" : {
+    "WebServerScaleUpPolicy" : {
       "Type" : "AWS::AutoScaling::ScalingPolicy",
       "Properties" : {
         "AdjustmentType" : "ChangeInCapacity",
-        "AutoScalingGroupName" : { "Ref" : "AutoScalingGroup" },
+        "AutoScalingGroupName" : { "Ref" : "WebServer" },
         "Cooldown" : "60",
         "ScalingAdjustment" : "1"
       }
     },
-    "AutoScalingGroupScaleDownPolicy" : {
+    "WebServerScaleDownPolicy" : {
       "Type" : "AWS::AutoScaling::ScalingPolicy",
       "Properties" : {
         "AdjustmentType" : "ChangeInCapacity",
-        "AutoScalingGroupName" : { "Ref" : "AutoScalingGroup" },
+        "AutoScalingGroupName" : { "Ref" : "WebServer" },
         "Cooldown" : "60",
         "ScalingAdjustment" : "-1"
       }
@@ -395,11 +335,11 @@
         "Period": "120",
         "EvaluationPeriods": "2",
         "Threshold": "50",
-        "AlarmActions": [ { "Ref": "AutoScalingGroupScaleUpPolicy" } ],
+        "AlarmActions": [ { "Ref": "WebServerScaleUpPolicy" } ],
         "Dimensions": [
           {
             "Name": "AutoScalingGroupName",
-            "Value": { "Ref": "AutoScalingGroup" }
+            "Value": { "Ref": "WebServer" }
           }
         ],
         "ComparisonOperator": "GreaterThanThreshold"
@@ -415,11 +355,11 @@
         "Period": "120",
         "EvaluationPeriods": "2",
         "Threshold": "50",
-        "AlarmActions": [ { "Ref": "AutoScalingGroupScaleDownPolicy" } ],
+        "AlarmActions": [ { "Ref": "WebServerScaleDownPolicy" } ],
         "Dimensions": [
           {
             "Name": "AutoScalingGroupName",
-            "Value": { "Ref": "AutoScalingGroup" }
+            "Value": { "Ref": "WebServer" }
           }
         ],
         "ComparisonOperator": "LessThanThreshold"
@@ -435,10 +375,10 @@
     "ALBListener" : {
       "Type" : "AWS::ElasticLoadBalancingV2::Listener",
       "Properties" : {
-        "DefaultActions" : [ {
+        "DefaultActions" : [{
           "Type" : "forward",
           "TargetGroupArn" : { "Ref" : "ALBTargetGroup" }
-        } ],
+        }],
         "LoadBalancerArn" : { "Ref" : "ApplicationLoadBalancer" },
         "Port" : "80",
         "Protocol" : "HTTP"
@@ -449,7 +389,7 @@
       "Properties" : {
         "HealthCheckIntervalSeconds" : 30,
         "HealthCheckTimeoutSeconds" : 25,
-        "HealthyThresholdCount" : 2,
+        "HealthyThresholdCount" : 3,
         "Port" : 80,
         "Protocol" : "HTTP",
         "UnhealthyThresholdCount" : 5,
@@ -510,51 +450,18 @@
             "ToPort" : "65535",
             "CidrIp" : "0.0.0.0/0"
            }
-        ],
+          ],
         "Tags" : [
-           {
-             "Key" : "Name",
-             "Value" : "websg"
-           }
-        ]
-      }
-    },
-    "DataBaseSG" : {
-      "Type" : "AWS::EC2::SecurityGroup",
-      "Properties" : {
-        "GroupDescription" : "Allow MySQL Traffic & SSH access from public subnet",
-        "VpcId" : {
-          "Ref" : "Staging"
-        },
-        "SecurityGroupIngress" : [
           {
-            "IpProtocol" : "tcp",
-            "FromPort" : "3306",
-            "ToPort" : "3306",
-            "SourceSecurityGroupId" : {
-              "Ref" : "WebSG"
-            }
-          },
-          {
-            "FromPort" : "22",
-            "ToPort" : "22",
-            "IpProtocol" : "tcp",
-            "SourceSecurityGroupId" : {
-              "Ref" : "WebSG"
-            }
+            "Key" : "Name",
+            "Value" : "websg"
           }
-        ],
-        "Tags" : [
-           {
-             "Key" : "Name",
-             "Value" : "databasesg"
-           }
         ]
       }
     }
   },
   "Outputs": {
-    "AutoScalingGroup" : {
+    "WebServer" : {
       "Description" : "Webserver IP address",
       "Value" : {
         "Fn::Join" : [
@@ -567,23 +474,6 @@
                 "DNSName"
               ]
             }
-          ]
-        ]
-      }
-    },
-    "Database" : {
-      "Description" : "Database URI",
-      "Value" : {
-        "Fn::Join" : [
-          "",
-          [
-            {
-              "Fn::GetAtt" : [
-                "Database",
-                "PrivateIp"
-              ]
-            },
-            ":3306"
           ]
         ]
       }
