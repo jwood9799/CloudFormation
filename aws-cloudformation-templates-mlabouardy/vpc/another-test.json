@@ -243,13 +243,6 @@
         "SecurityGroups" : [ { "Ref" : "BastionSecurityGroup" } ],
         "ImageId" : "ami-4fffc834",
         "InstanceType" : { "Ref" : "InstanceType" },
-
-        "Tags" : [
-          {
-            "Key" : "Name", 
-            "Value" : "bastioninstance"
-          }
-        ]
       }
     },
     "LaunchConfig" : {
