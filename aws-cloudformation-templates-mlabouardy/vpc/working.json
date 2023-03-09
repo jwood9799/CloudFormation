@@ -250,18 +250,11 @@
             "Fn::Join" : [
               "",
               [
-                "#!/bin/bash\n",
-                "yum update -y\n", 
-                "yum install -y httpd\n", 
-                "systemctl start httpd\n", 
-                "systemctl enable httpd\n", 
-                "cd /var/www/html\n", 
-                "aws s3 cp s3://dct-cf-website/index.html ./\n", 
-                "aws s3 cp s3://dct-cf-website/website.css ./\n", 
-                "cp index.html index.txt\n", 
-                "rm -rf index.html\n", 
-                "EC2AZ=$(curl -s http://169.254.169.254/latest/meta-data/placement/availability-zone)\n", 
-                "sed \"s/AZID/$EC2AZ/\" /var/www/html/index.txt > /var/www/html/index.html"
+                "#!/bin/sh\n",
+                "yum install -y httpd\n",
+                "chkconfig httpd on\n",
+                "httpd\n",
+                "echo '<html>Hello guys !<html/>' > /var/www/html/index.html"
               ]
             ]
           }
