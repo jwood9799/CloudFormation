@@ -241,7 +241,7 @@
       "Properties" : {
         "SubnetId" : { "Ref" : "PublicSubnet" },
         "SecurityGroupIds" : [ { "Fn::GetAtt" : [ "BastionSecurityGroup", "GroupId" ] } ],
-        "ImageId" : "ami-4fffc834",
+        "ImageId" : "ami-005f9685cb30f234b",
         "InstanceType" : { "Ref" : "InstanceType" },
 
         "Tags" : [
@@ -255,7 +255,7 @@
     "LaunchConfig" : {
       "Type" : "AWS::AutoScaling::LaunchConfiguration", 
       "Properties" : {
-        "ImageId" : "ami-4fffc834",
+        "ImageId" : "ami-005f9685cb30f234b",
         "SecurityGroups" : [ { "Ref" : "WebSG" } ],
         "KeyName" : { "Ref" : "KeyName" },
         "InstanceType" : { "Ref" : "InstanceType" },
@@ -481,9 +481,21 @@
         "SecurityGroupIngress" : [
           {
             "IpProtocol" : "tcp",
+            "FromPort" : 443,
+            "ToPort" : 443,
+            "CidrIp" : "0.0.0.0/0"
+          },
+          {
+            "IpProtocol" : "tcp",
             "FromPort" : 80, 
             "ToPort" : 80,
             "SourceSecurityGroupId" : { "Ref" : "LoadBalancerSecurityGroup" }
+          },
+          {
+            "IpProtocol" : "tcp",
+            "FromPort" : 22,
+            "ToPort" : 22,
+            "CidrIp" : "0.0.0.0/0"
           }
         ],
         "Tags" : [

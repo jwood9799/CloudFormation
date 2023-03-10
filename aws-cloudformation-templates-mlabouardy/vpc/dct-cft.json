@@ -66,38 +66,6 @@
         ]
       }
     },
-    "PrivateSubnet" : {
-      "Type" : "AWS::EC2::Subnet",
-      "Properties" : {
-        "CidrBlock" : "10.0.1.0/24",
-        "AvailabilityZone" : "us-east-1a",
-        "VpcId" : {
-          "Ref" : "Staging"
-        },
-        "Tags" : [
-           {
-             "Key" : "Name",
-             "Value" : "private-10.0.1.0-us-east-1a"
-           }
-        ]
-      }
-    },
-    "PrivateSubnet2" : {
-      "Type" : "AWS::EC2::Subnet",
-      "Properties" : {
-        "CidrBlock" : "10.0.3.0/24",
-        "AvailabilityZone" : "us-east-1b",
-        "VpcId" : {
-          "Ref" : "Staging"
-        },
-        "Tags" : [
-           {
-             "Key" : "Name",
-             "Value" : "private-10.0.1.0-us-east-1b"
-           }
-        ]
-      }
-    },
     "IGW" : {
       "Type" : "AWS::EC2::InternetGateway",
       "Properties" : {
@@ -118,24 +86,6 @@
         "InternetGatewayId" : {
           "Ref" : "IGW"
         }
-      }
-    },
-    "NatIpAddress" : {
-      "Type" : "AWS::EC2::EIP",
-      "Properties" : {
-        "Domain" : "vpc"
-      }
-    },
-    "NatGateway" : {
-      "Type" : "AWS::EC2::NatGateway",
-      "Properties" : {
-        "AllocationId" : {
-          "Fn::GetAtt" : [
-            "NatIpAddress",
-            "AllocationId"
-          ]
-        },
-        "SubnetId" : { "Ref" : "PublicSubnet" }
       }
     },
     "PublicRouteTable" : {
@@ -187,60 +137,11 @@
         }
       }
     },
-    "PrivateRouteTable" : {
-      "Type" : "AWS::EC2::RouteTable",
-      "Properties" : {
-        "VpcId" : {
-          "Ref" : "Staging"
-        },
-        "Tags" : [
-           {
-             "Key" : "Name",
-             "Value" : "private-rt"
-           }
-        ]
-      }
-    },
-    "PrivateRoute" : {
-      "Type" : "AWS::EC2::Route",
-      "DependsOn" : "NatGateway",
-      "Properties" : {
-        "RouteTableId" : {
-          "Ref" : "PrivateRouteTable"
-        },
-        "DestinationCidrBlock" : "0.0.0.0/0", 
-        "NatGatewayId" : {
-          "Ref" : "NatGateway"
-        }
-      }
-    },
-    "PrivateSubnetRouteTableAssociation" : {
-      "Type" : "AWS::EC2::SubnetRouteTableAssociation",
-      "Properties" : {
-        "SubnetId" : {
-          "Ref" : "PrivateSubnet"
-        },
-        "RouteTableId" : {
-          "Ref" : "PrivateRouteTable"
-        }
-      }
-    },
-    "PrivateSubnetRouteTableAssociation2" : {
-      "Type" : "AWS::EC2::SubnetRouteTableAssociation",
-      "Properties" : {
-        "SubnetId" : {
-          "Ref" : "PrivateSubnet2"
-        },
-        "RouteTableId" : {
-          "Ref" : "PrivateRouteTable"
-        }
-      }
-    },
     "LaunchConfig" : {
       "Type" : "AWS::AutoScaling::LaunchConfiguration", 
       "Properties" : {
         "AssociatePublicIpAddress" : "true",
-        "ImageId" : "ami-4fffc834",
+        "ImageId" : "ami-005f9685cb30f234b",
         "SecurityGroups" : [ { "Ref" : "WebSG" } ],
         "KeyName" : { "Ref" : "KeyName" },
         "InstanceType" : { "Ref" : "InstanceType" },
@@ -322,36 +223,10 @@
         ]
       }
     },
-    "Database" : {
-      "Type" : "AWS::EC2::Instance",
-      "Properties" : {
-        "ImageId" : "ami-4fffc834",
-        "SubnetId" : {
-          "Ref" : "PrivateSubnet"
-          },
-        "InstanceType" : {
-          "Ref" : "InstanceType"
-        },
-        "KeyName" : {
-          "Ref" : "KeyName"
-        },
-        "SecurityGroupIds" : [
-          {
-            "Ref" : "DataBaseSG"
-          }
-        ],
-        "Tags" : [
-           {
-             "Key" : "Name",
-             "Value" : "database"
-           }
-        ]
-      }
-    },
     "AutoScalingGroup" : {
       "Type" : "AWS::AutoScaling::AutoScalingGroup",
       "Properties" : {
-        "VPCZoneIdentifier" : [ { "Ref" : "PrivateSubnet" }, { "Ref" : "PrivateSubnet2"} ], 
+        "VPCZoneIdentifier" : [ { "Ref" : "PublicSubnet" }, { "Ref" : "PublicSubnet2"} ], 
         "LaunchConfigurationName" : { "Ref" : "LaunchConfig" },
         "MinSize" : "2",
         "MaxSize" : "5",
@@ -427,8 +302,9 @@
     },
     "ApplicationLoadBalancer" : {
       "Type" : "AWS::ElasticLoadBalancingV2::LoadBalancer",
+      "DependsOn" : "IGW",
       "Properties" : {
-        "Subnets" : [ { "Ref" : "PublicSubnet" }, { "Ref" : "PublicSubnet2" } ],
+        "Subnets" : [ { "Ref" : "PrivateSubnet" }, { "Ref" : "PrivateSubnet2" } ],
         "SecurityGroups" : [ { "Ref" : "LoadBalancerSecurityGroup" } ]
       }
     },
@@ -504,31 +380,6 @@
            }
         ]
       }
-    },
-    "DataBaseSG" : {
-      "Type" : "AWS::EC2::SecurityGroup",
-      "Properties" : {
-        "GroupDescription" : "Allow MySQL Traffic & SSH access from public subnet",
-        "VpcId" : {
-          "Ref" : "Staging"
-        },
-        "SecurityGroupIngress" : [
-          {
-            "IpProtocol" : "tcp",
-            "FromPort" : 3306,
-            "ToPort" : 3306,
-            "SourceSecurityGroupId" : {
-              "Ref" : "WebSG"
-            }
-          }
-        ],
-        "Tags" : [
-           {
-             "Key" : "Name",
-             "Value" : "databasesg"
-           }
-        ]
-      }
     }
   },
   "Outputs": {
@@ -545,23 +396,6 @@
                 "DNSName"
               ]
             }
-          ]
-        ]
-      }
-    },
-    "Database" : {
-      "Description" : "Database URI",
-      "Value" : {
-        "Fn::Join" : [
-          "",
-          [
-            {
-              "Fn::GetAtt" : [
-                "Database",
-                "PrivateIp"
-              ]
-            },
-            ":3306"
           ]
         ]
       }
