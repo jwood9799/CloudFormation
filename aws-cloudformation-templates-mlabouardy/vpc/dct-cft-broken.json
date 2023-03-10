@@ -324,32 +324,6 @@
         ]
       }
     },
-    "Database": {
-      "Type": "AWS::EC2::Instance",
-      "Properties": {
-        "ImageId": "ami-005f9685cb30f234b",
-        "SubnetId": {
-          "Ref": "PrivateSubnet"
-        },
-        "InstanceType": {
-          "Ref": "InstanceType"
-        },
-        "KeyName": {
-          "Ref": "KeyName"
-        },
-        "SecurityGroupIds": [
-          {
-            "Ref": "DataBaseSG"
-          }
-        ],
-        "Tags": [
-          {
-            "Key": "Name",
-            "Value": "database"
-          }
-        ]
-      }
-    },
     "AutoScalingGroup": {
       "Type": "AWS::AutoScaling::AutoScalingGroup",
       "Properties": {
@@ -559,31 +533,6 @@
           }
         ]
       }
-    },
-    "DataBaseSG": {
-      "Type": "AWS::EC2::SecurityGroup",
-      "Properties": {
-        "GroupDescription": "Allow MySQL Traffic & SSH access from public subnet",
-        "VpcId": {
-          "Ref": "Staging"
-        },
-        "SecurityGroupIngress": [
-          {
-            "IpProtocol": "tcp",
-            "FromPort": 3306,
-            "ToPort": 3306,
-            "SourceSecurityGroupId": {
-              "Ref": "WebSG"
-            }
-          }
-        ],
-        "Tags": [
-          {
-            "Key": "Name",
-            "Value": "databasesg"
-          }
-        ]
-      }
     }
   },
   "Outputs": {
@@ -597,20 +546,6 @@
             {
               "Fn::GetAtt": ["ApplicationLoadBalancer", "DNSName"]
             }
-          ]
-        ]
-      }
-    },
-    "Database": {
-      "Description": "Database URI",
-      "Value": {
-        "Fn::Join": [
-          "",
-          [
-            {
-              "Fn::GetAtt": ["Database", "PrivateIp"]
-            },
-            ":3306"
           ]
         ]
       }
